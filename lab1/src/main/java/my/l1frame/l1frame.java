@@ -164,72 +164,88 @@ public class l1frame extends javax.swing.JFrame { //наследование
     //кнопка рассчитать
     private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
         // TODO add your handling code here:
-         int rowCount = tableModel.getRowCount();
-    int calculatedCount = 0;
+         //int rowCount = tableModel.getRowCount();
+         int selectedRow = jTable1.getSelectedRow();
+         int calculatedCount = 0;
     
-    if (rowCount == 0) {
+
+    if (selectedRow == -1) {
         javax.swing.JOptionPane.showMessageDialog(this, 
-            "Таблица пуста! Сначала добавьте данные через кнопку 'Заполнить'", 
-            "Информация", 
-            javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            "Пожалуйста, выберите строку для рассчета!", 
+            "Предупреждение", 
+            javax.swing.JOptionPane.WARNING_MESSAGE);
         return;
-    }
-    
-    for (int i = 0; i < rowCount; i++) {
+    } 
+
+    //for (int i = 0; i < rowCount; i++) {
         // Проверяем, есть ли результат вычислений по 3 столбцу 
-        Object resultValue = tableModel.getValueAt(i, 3);
-        boolean hasResult = resultValue != null && !resultValue.toString().trim().isEmpty();
-        
-        if (hasResult) {
-            continue;
-        }
+//        Object resultValue = tableModel.getValueAt(selectedRow, 3);
+//        boolean hasResult = resultValue != null && !resultValue.toString().trim().isEmpty();
+//        
+//        if (hasResult) {
+//            javax.swing.JOptionPane.showMessageDialog(this, 
+//                    "В этой строке уже есть результат!",
+//                    "Информация",
+//                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+//            
+//            return;
+//        }
         
         try {
-            Object lowerObj = tableModel.getValueAt(i, 0);
-            Object upperObj = tableModel.getValueAt(i, 1);
-            Object stepObj = tableModel.getValueAt(i, 2);
+            Object lowerObj = tableModel.getValueAt(selectedRow, 0);
+            Object upperObj = tableModel.getValueAt(selectedRow, 1);
+            Object stepObj = tableModel.getValueAt(selectedRow, 2);
             
             if (lowerObj == null || upperObj == null || stepObj == null ||
                 lowerObj.toString().trim().isEmpty() || 
                 upperObj.toString().trim().isEmpty() || 
                 stepObj.toString().trim().isEmpty()) {
-                continue; 
-            }
-            
+                javax.swing.JOptionPane.showMessageDialog(this, 
+                    "Не все данные введены", 
+                    "Информация", 
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+                     
             double lowerLimit = Double.parseDouble(lowerObj.toString());
             double upperLimit = Double.parseDouble(upperObj.toString());
             double step = Double.parseDouble(stepObj.toString());
+                       
+        Object resultValue = tableModel.getValueAt(selectedRow, 3);
+        boolean hasResult = resultValue != null && !resultValue.toString().trim().isEmpty();
+        
+        if (hasResult) {
+            int ans = javax.swing.JOptionPane.showConfirmDialog(this,
+                    "В этой строке уже есть результат!Проверьте были ли изменены столбцы!Произвести расчет снова?",
+                    "Подтверждение",
+                    javax.swing.JOptionPane.YES_NO_OPTION);
             
-            if (lowerLimit >= upperLimit) {
-                tableModel.setValueAt("Ошибка: нижний >= верхний", i, 3);
-                continue;
+            if (ans != javax.swing.JOptionPane.YES_OPTION){
+                return;
             }
-            
-            if (step <= 0) {
-                tableModel.setValueAt("Ошибка: шаг <= 0", i, 3);
-                continue;
-            }
-            
+            //return;
+        }
+        
             // Вычисляем интеграл
             double result = calculateIntegral(lowerLimit, upperLimit, step);
             
             //сохранение реза
-            tableModel.setValueAt(String.format("%.6f", result), i, 3);
+            tableModel.setValueAt(String.format("%.6f", result), selectedRow, 3);
             calculatedCount++;
             
         } catch (NumberFormatException ex) {
-            tableModel.setValueAt("Ошибка формата", i, 3);
-        } catch (Exception ex) {
-            tableModel.setValueAt("Ошибка", i, 3);
-        }
-    }
-    
-    if (calculatedCount == 0) {
         javax.swing.JOptionPane.showMessageDialog(this, 
-            "Нет строк для расчета (все строки уже содержат результаты или имеют ошибки)", 
-            "Информация", 
-            javax.swing.JOptionPane.INFORMATION_MESSAGE);
-        }
+            "Ошибка формата данных в выбранной строке!", 
+            "Ошибка", 
+            javax.swing.JOptionPane.ERROR_MESSAGE);
+    } catch (Exception ex) {
+        javax.swing.JOptionPane.showMessageDialog(this, 
+            "Произошла ошибка при расчете!", 
+            "Ошибка", 
+            javax.swing.JOptionPane.ERROR_MESSAGE);
+    }
+ 
+    
     }//GEN-LAST:event_jButton2ActionPerformed
 
     
