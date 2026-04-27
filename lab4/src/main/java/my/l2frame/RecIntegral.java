@@ -7,7 +7,8 @@ package my.l2frame;
 /**
  *
  * @author Марина
- */import java.io.Serializable;
+ */
+import java.io.Serializable;
 public class RecIntegral implements Serializable{
     private static final long serialVersionUID = 1L;
     private double lowerLimit;
@@ -16,7 +17,19 @@ public class RecIntegral implements Serializable{
     private double result;
     private boolean hasResult;
     
-    public RecIntegral(double lowerLimit, double upperLimit, double step) {
+    public RecIntegral(double lowerLimit, double upperLimit, double step) throws ValidData{
+        if (lowerLimit < 0.000001 || lowerLimit > 1000000) {
+            throw new ValidData("Нижний предел вне диапазона [0.000001, 1000000]");
+        }
+        if (upperLimit < 0.000001 || upperLimit > 1000000) {
+            throw new ValidData("Верхний предел вне диапазона [0.000001, 1000000]");
+        }
+        if (step < 0.000001 || step > 1000000) {
+            throw new ValidData("Шаг вне диапазона [0.000001, 1000000]");
+        }
+        if (lowerLimit >= upperLimit) {
+            throw new ValidData("Нижний предел должен быть меньше верхнего!");
+        }
         this.lowerLimit = lowerLimit;
         this.upperLimit = upperLimit;
         this.step = step;

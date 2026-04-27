@@ -8,9 +8,13 @@ import java.util.ArrayList;
 import javax.swing.table.DefaultTableModel;
 //
 import javax.swing.event.TableModelEvent;
-import javax.swing.event.TableModelListener;
-import java.io.*;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 /**
  *
  * @author Марина
@@ -20,23 +24,53 @@ public class l2frame extends javax.swing.JFrame { //наследование
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(l2frame.class.getName());
     private DefaultTableModel tableModel;
     private ArrayList<RecIntegral> dataList;
+    
+    private RecIntegral editingRecord = null;
+    private int editingRow = -1;
     /**
      * Creates new form l1frame
      */
     public l2frame() {
-        initComponents();
-        tableModel = (javax.swing.table.DefaultTableModel) jTable1.getModel();
-        dataList = new ArrayList<>();
-        //
-        tableModel.addTableModelListener(e -> {
-        if (e.getType() == TableModelEvent.UPDATE && e.getColumn() <= 2 && e.getFirstRow() >= 0) {
-            tableModel.setValueAt("", e.getFirstRow(), 3);
-            updateCollection();
+    initComponents();
+    tableModel = (javax.swing.table.DefaultTableModel) jTable1.getModel();
+    dataList = new ArrayList<>();
+    
+    // Слушатель начала редактирования - сохраняем старые значения
+    jTable1.addPropertyChangeListener(evt -> {
+        if ("tableCellEditor".equals(evt.getPropertyName())) {
+            if (jTable1.isEditing()) {
+                // Началось редактирование
+                editingRow = jTable1.getEditingRow();
+                int editingCol = jTable1.getEditingColumn();
+                
+                // Сохраняем старые значения только если редактируем колонки 0-2
+                if (editingRow >= 0 && editingCol >= 0 && editingCol <= 2) {
+                    editingRecord = findRecordForTableRow(editingRow);
+                    System.out.println("Начато редактирование. Запись в коллекции: " + 
+                                     (editingRecord != null ? "найдена" : "НЕ найдена"));
+                }
+                // НЕ сбрасываем editingRow здесь, он нужен для слушателя изменений
             }
-        });
-    }
+        }
+    });
+    
+    // ВАЖНО: Добавляем вызов updateRecordInCollection в слушатель изменений таблицы
+    tableModel.addTableModelListener(e -> {
+        if (e.getType() == TableModelEvent.UPDATE && e.getColumn() <= 2 && e.getFirstRow() >= 0) {
+            // Очищаем результат
+            tableModel.setValueAt("", e.getFirstRow(), 3);
+            
+            if (editingRecord != null) {
+                updateEditingRecord(e.getFirstRow());
+                editingRecord = null;
+                editingRow = -1; // Сбрасываем после обновления
+            }
+        }
+    });
+}
    
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("unchecked")     
+// Поиск записи в коллекции по строке таблицы
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
@@ -237,6 +271,49 @@ public class l2frame extends javax.swing.JFrame { //наследование
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
+    private RecIntegral findRecordForTableRow(int rowIndex) {
+    try {
+        double lowerLimit = Double.parseDouble(tableModel.getValueAt(rowIndex, 0).toString());
+        double upperLimit = Double.parseDouble(tableModel.getValueAt(rowIndex, 1).toString());
+        double step = Double.parseDouble(tableModel.getValueAt(rowIndex, 2).toString());
+        
+        // Ищем запись с такими же параметрами
+        for (RecIntegral rec : dataList) {
+            if (rec.getLowerLimit() == lowerLimit && 
+                rec.getUpperLimit() == upperLimit && 
+                rec.getStep() == step) {
+                return rec;
+            }
+        }
+        
+        return null;
+        
+    } catch (Exception e) {
+        return null;
+    }
+}
+
+// Обновление редактируемой записи
+private void updateEditingRecord(int rowIndex) {
+    try {
+        double newLowerLimit = Double.parseDouble(tableModel.getValueAt(rowIndex, 0).toString());
+        double newUpperLimit = Double.parseDouble(tableModel.getValueAt(rowIndex, 1).toString());
+        double newStep = Double.parseDouble(tableModel.getValueAt(rowIndex, 2).toString());
+        
+        editingRecord.setLowerLimit(newLowerLimit);
+        editingRecord.setUpperLimit(newUpperLimit);
+        editingRecord.setStep(newStep);
+        editingRecord.clearResult();
+        
+        System.out.println("Запись в коллекции обновлена: " + 
+                         newLowerLimit + " | " + newUpperLimit + " | " + newStep);
+    } catch (Exception e) {
+        System.out.println("Ошибка при обновлении записи: " + e.getMessage());
+    }
+}
+    
+
+
     // Метод для обновления таблицы из коллекции
     private void updateTableFromList() {
         tableModel.setRowCount(0);
@@ -251,40 +328,57 @@ public class l2frame extends javax.swing.JFrame { //наследование
             });
         }
     }
-   
+ 
     private void updateCollection() {
-    dataList.clear(); // Очищаем коллекцию
-    
+        
     for (int i = 0; i < tableModel.getRowCount(); i++) {
         try {
-            // Получаем значения из таблицы
             double lowerLimit = Double.parseDouble(tableModel.getValueAt(i, 0).toString());
             double upperLimit = Double.parseDouble(tableModel.getValueAt(i, 1).toString());
             double step = Double.parseDouble(tableModel.getValueAt(i, 2).toString());
             
-            // Получаем результат (может быть пустым)
             Object resultObj = tableModel.getValueAt(i, 3);
             boolean hasResult = resultObj != null && !resultObj.toString().trim().isEmpty();
             
-            RecIntegral rec;
-            if (hasResult) {
-                // Если есть результат - сохраняем его
-                double result = Double.parseDouble(resultObj.toString().trim().replace(',', '.'));
-                rec = new RecIntegral(lowerLimit, upperLimit, step, result);
+            // Ищем существующую запись
+            RecIntegral existingRec = findExistingRecord(lowerLimit, upperLimit, step);
+            
+            if (existingRec != null) {
+                // Обновляем результат, если он есть
+                if (hasResult) {
+                    double result = Double.parseDouble(resultObj.toString().trim().replace(',', '.'));
+                    existingRec.setResult(result);
+                }
             } else {
-                // Если нет результата
-                rec = new RecIntegral(lowerLimit, upperLimit, step);
+                // Добавляем новую запись
+                RecIntegral rec;
+                if (hasResult) {
+                    double result = Double.parseDouble(resultObj.toString().trim().replace(',', '.'));
+                    rec = new RecIntegral(lowerLimit, upperLimit, step, result);
+                } else {
+                    rec = new RecIntegral(lowerLimit, upperLimit, step);
+                }
+                dataList.add(rec);
             }
-            dataList.add(rec);
             
         } catch (Exception e) {
-            // Пропускаем некорректные строки
             System.out.println("Ошибка в строке " + i + ": " + e.getMessage());
         }
     }
     
     System.out.println("Сохранено в коллекцию: " + dataList.size() + " записей");
+}
+
+private RecIntegral findExistingRecord(double lowerLimit, double upperLimit, double step) {
+    for (RecIntegral rec : dataList) {
+        if (rec.getLowerLimit() == lowerLimit && 
+            rec.getUpperLimit() == upperLimit && 
+            rec.getStep() == step) {
+            return rec;
+        }
     }
+    return null;
+}
     
     private void jTextField1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextField1ActionPerformed
     }//GEN-LAST:event_jTextField1ActionPerformed
@@ -302,7 +396,6 @@ public class l2frame extends javax.swing.JFrame { //наследование
     }
     
     try {
-        // Читаем значения из таблицы
         double lowerLimit = Double.parseDouble(
             tableModel.getValueAt(selectedRow, 0).toString());
         double upperLimit = Double.parseDouble(
@@ -310,30 +403,29 @@ public class l2frame extends javax.swing.JFrame { //наследование
         double step = Double.parseDouble(
             tableModel.getValueAt(selectedRow, 2).toString());
         
-        ValidData.validate(lowerLimit, upperLimit, step);
+        //ValidData.validate(lowerLimit, upperLimit, step);
         
         // Вычисляем интеграл
         RecIntegral rec = new RecIntegral(lowerLimit, upperLimit, step);
         double result = rec.calculateIntegral();
         
-        // Сохраняем результат
+        // Обновляем результат в таблице
         tableModel.setValueAt(String.format("%.6f", result), selectedRow, 3);
         
-        //tableModel.fireTableDataChanged();
-         if (jTable1.getCellEditor() != null) {
+        if (jTable1.getCellEditor() != null) {
             jTable1.getCellEditor().stopCellEditing();
         }
-        // Обновляем коллекцию
+        
         updateCollection();
+        
+        System.out.println("Расчет выполнен. Данные сохранены в коллекцию: " + dataList.size() + " записей");
                
     } catch (ValidData e) {
         javax.swing.JOptionPane.showMessageDialog(this, 
-            "Ошибка!\n" +
-            "Пожалуйста, введите корректное число.", 
+            "Ошибка!\nПожалуйста, введите корректное число.", 
             "Ошибка", 
             javax.swing.JOptionPane.ERROR_MESSAGE);
         }
-    
     }//GEN-LAST:event_Rasschet
 
     private void jTable1ComponentHidden(java.awt.event.ComponentEvent evt) {//GEN-FIRST:event_jTable1ComponentHidden
@@ -341,30 +433,25 @@ public class l2frame extends javax.swing.JFrame { //наследование
     }//GEN-LAST:event_jTable1ComponentHidden
 
     private void Vnesti(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_Vnesti
-    // Проверяем, есть ли данные в полях ввода
-    boolean hasFieldData = !jTextField1.getText().trim().isEmpty() ||
+     boolean hasFieldData = !jTextField1.getText().trim().isEmpty() ||
                            !jTextField2.getText().trim().isEmpty() ||
                            !jTextField3.getText().trim().isEmpty();
     
     if (hasFieldData) {
-        //добавление новой строки
         try {
-            double[] values = ValidData.validateAndParse(
-                jTextField2.getText(),  // нижний предел
-                jTextField1.getText(),  // верхний предел
-                jTextField3.getText()   // шаг
-            );
+            double lowerLimit = Double.parseDouble(jTextField2.getText().trim().replace(',', '.'));
+            double upperLimit = Double.parseDouble(jTextField1.getText().trim().replace(',', '.'));
+            double step = Double.parseDouble(jTextField3.getText().trim().replace(',', '.'));
             
-            double lowerLimit = values[0];
-            double upperLimit = values[1];
-            double step = values[2];
-  
-            // Добавляем новую строку (слушатель сам обновит коллекцию)
+            // Исключение генерируется здесь, если данные некорректны
+            new RecIntegral(lowerLimit, upperLimit, step);
+            
+            // Просто добавляем строку в таблицу
             tableModel.addRow(new Object[]{lowerLimit, upperLimit, step, ""});
             
-            updateCollection();
+            System.out.println("Добавлена строка в таблицу: нижний=" + lowerLimit + 
+                             ", верхний=" + upperLimit + ", шаг=" + step);
             
-             System.out.println("Коллекция теперь содержит: " + dataList.size() + " записей");
             // Очищаем поля
             jTextField1.setText("");
             jTextField2.setText("");
@@ -377,18 +464,15 @@ public class l2frame extends javax.swing.JFrame { //наследование
                 javax.swing.JOptionPane.ERROR_MESSAGE);
         }
     } else {
-        //просто синхронизируем коллекцию
-        updateCollection();
         javax.swing.JOptionPane.showMessageDialog(this,
-            "Коллекция синхронизирована!\nЗаписей: " + dataList.size(),
+            "Нет данных для добавления.\n" +
+            "Коллекция содержит: " + dataList.size() + " записей",
             "Информация",
             javax.swing.JOptionPane.INFORMATION_MESSAGE);
         }
-        
     }//GEN-LAST:event_Vnesti
 
     private void ydalitActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_ydalitActionPerformed
-        // TODO add your handling code here:
         int selectedRow = jTable1.getSelectedRow();
     
     if (selectedRow == -1) {
@@ -398,15 +482,19 @@ public class l2frame extends javax.swing.JFrame { //наследование
             javax.swing.JOptionPane.WARNING_MESSAGE);
         return;
     }
+    
     int confirm = javax.swing.JOptionPane.showConfirmDialog(this,
-            "Удалить выбранную строку?",
+            "Удалить выбранную строку?\n" +
+            "(только из таблицы, коллекция не изменится)",
             "Подтверждение",
             javax.swing.JOptionPane.YES_NO_OPTION);
         
-            if (confirm == javax.swing.JOptionPane.YES_OPTION) {
-    
-                tableModel.removeRow(selectedRow);//удаление строки
-            }
+    if (confirm == javax.swing.JOptionPane.YES_OPTION) {
+        // Удаляем только из таблицы
+        tableModel.removeRow(selectedRow);
+        System.out.println("Строка удалена из таблицы. В таблице осталось: " + tableModel.getRowCount() + " строк");
+        System.out.println("Коллекция не изменилась: " + dataList.size() + " записей");
+        }
     }//GEN-LAST:event_ydalitActionPerformed
 
     private void Zapolnit(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_Zapolnit
@@ -469,66 +557,85 @@ public class l2frame extends javax.swing.JFrame { //наследование
             javax.swing.JOptionPane.YES_NO_OPTION);
         
         if (confirm == javax.swing.JOptionPane.YES_OPTION) {
-            // Очищаем таблицу
+            // Очищаем только таблицу
             tableModel.setRowCount(0);
             
             javax.swing.JOptionPane.showMessageDialog(this,
                 "Таблица очищена!\n\n" +
-                "Нажмите 'Заполнить' для восстановления данных.",
+                "Коллекция содержит: " + dataList.size() + " записей\n\n",
                 "Успех",
                 javax.swing.JOptionPane.INFORMATION_MESSAGE);
         }
     } else {
         javax.swing.JOptionPane.showMessageDialog(this,
-            "Таблица уже пуста!",
+            "Таблица уже пуста!\n" +
+            "Коллекция содержит: " + dataList.size() + " записей",
             "Информация",
             javax.swing.JOptionPane.INFORMATION_MESSAGE);
         }
     }//GEN-LAST:event_Ochistit
 
     private void Zagruzka_txt(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_Zagruzka_txt
-        // TODO add your handling code here:
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
-        if (fc.showOpenDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
-            java.io.FileReader myfile = null;
-            try {
-                myfile = new java.io.FileReader(fc.getSelectedFile().getAbsolutePath());
-                StringBuilder content = new StringBuilder();
-                int c;
-                while ((c = myfile.read()) != -1) {
-                    content.append((char) c);
-                }
+    if (fc.showOpenDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+        java.io.FileReader myfile = null;
+        try {
+            myfile = new java.io.FileReader(fc.getSelectedFile().getAbsolutePath());
+            StringBuilder content = new StringBuilder();
+            int c;
+            while ((c = myfile.read()) != -1) {
+                content.append((char) c);
+            }
+        
+            dataList.clear();
+            String[] lines = content.toString().split("\n");
+            int loadedCount = 0;
+            int errorCount = 0;
             
-            // Парсим содержимое
-                dataList.clear();
-                String[] lines = content.toString().split("\n");
-                for (String line : lines) {
-                    if (line.trim().isEmpty()) continue;
-                    String[] parts = line.split(";");
-                    if (parts.length >= 3) {
+            for (String line : lines) {
+                if (line.trim().isEmpty()) continue;
+                String[] parts = line.split(";");
+                if (parts.length >= 3) {
+                    try {
                         double lower = Double.parseDouble(parts[0]);
                         double upper = Double.parseDouble(parts[1]);
                         double step = Double.parseDouble(parts[2]);
-                        if (parts.length >= 4 && !parts[3].isEmpty()) {
+                        
+                        if (parts.length >= 4 && !parts[3].trim().isEmpty()) {
                             dataList.add(new RecIntegral(lower, upper, step, Double.parseDouble(parts[3])));
                         } else {
                             dataList.add(new RecIntegral(lower, upper, step));
                         }
+                        loadedCount++;
+                    } catch (ValidData e) {
+                        errorCount++;
+                        System.out.println("Пропущена строка: " + line + " - " + e.getMessage());
+                    } catch (NumberFormatException e) {
+                        errorCount++;
+                        System.out.println("Некорректное число в строке: " + line);
                     }
                 }
-                updateTableFromList();
-                javax.swing.JOptionPane.showMessageDialog(this, "Загружено " + dataList.size() + " записей!");
+            }
+            
+            updateTableFromList();
+            
+            String message = "Загружено " + loadedCount + " записей!";
+            if (errorCount > 0) {
+                message += "\nПропущено " + errorCount + " строк с ошибками.";
+            }
+            javax.swing.JOptionPane.showMessageDialog(this, message);
+            
+        } catch (java.io.IOException ex) {
+            ex.printStackTrace();
+            javax.swing.JOptionPane.showMessageDialog(this, "Ошибка чтения файла: " + ex.getMessage());
+        } finally {
+            try {
+                if (myfile != null) myfile.close();
             } catch (java.io.IOException ex) {
                 ex.printStackTrace();
-                javax.swing.JOptionPane.showMessageDialog(this, "Ошибка: " + ex.getMessage());
-            } finally {
-                try {
-                    if (myfile != null) myfile.close();
-                } catch (java.io.IOException ex) {
-                    ex.printStackTrace();
-                }
             }
         }
+    }
     }//GEN-LAST:event_Zagruzka_txt
     
     //@SuppressWarnings("unchecked")
