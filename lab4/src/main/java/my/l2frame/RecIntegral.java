@@ -1,15 +1,8 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package my.l2frame;
 
-/**
- *
- * @author Марина
- */
 import java.io.Serializable;
-public class RecIntegral implements Serializable{
+
+public class RecIntegral implements Serializable {
     private static final long serialVersionUID = 1L;
     private double lowerLimit;
     private double upperLimit;
@@ -17,7 +10,7 @@ public class RecIntegral implements Serializable{
     private double result;
     private boolean hasResult;
     
-    public RecIntegral(double lowerLimit, double upperLimit, double step) throws ValidData{
+    public RecIntegral(double lowerLimit, double upperLimit, double step) throws ValidData {
         if (lowerLimit < 0.000001 || lowerLimit > 1000000) {
             throw new ValidData("Нижний предел вне диапазона [0.000001, 1000000]");
         }
@@ -36,47 +29,41 @@ public class RecIntegral implements Serializable{
         this.hasResult = false;
         this.result = 0;
     }
+
+    public RecIntegral(String lowerStr, String upperStr, String stepStr) throws ValidData {
+        this(
+            parseDouble(lowerStr, "Нижний предел"),
+            parseDouble(upperStr, "Верхний предел"),
+            parseDouble(stepStr, "Шаг")
+        );
+    }
     
-    public RecIntegral(double lowerLimit, double upperLimit, double step, double result) {
-        this.lowerLimit = lowerLimit;
-        this.upperLimit = upperLimit;
-        this.step = step;
+    public RecIntegral(double lowerLimit, double upperLimit, double step, double result) throws ValidData {
+        this(lowerLimit, upperLimit, step);
         this.result = result;
         this.hasResult = true;
     }
-    // Геттеры
-    public double getLowerLimit() {
-        return lowerLimit;
-    }
     
-    public double getUpperLimit() {
-        return upperLimit;
+    private static double parseDouble(String value, String fieldName) throws ValidData {
+        if (value == null || value.trim().isEmpty()) {
+            throw new ValidData("Поле '" + fieldName + "' не заполнено!");
+        }
+        try {
+            return Double.parseDouble(value.trim().replace(',', '.'));
+        } catch (NumberFormatException e) {
+            throw new ValidData("Поле '" + fieldName + " " + value + "' не является числом!");
+        }
     }
-    
-    public double getStep() {
-        return step;
-    }
-    
-    public double getResult() {
-        return result;
-    }
-    
-    public boolean hasResult() {
-        return hasResult;
-    }
-    
-    // Сеттеры
-    public void setLowerLimit(double lowerLimit) {
-        this.lowerLimit = lowerLimit;
-    }
-    
-    public void setUpperLimit(double upperLimit) {
-        this.upperLimit = upperLimit;
-    }
-    
-    public void setStep(double step) {
-        this.step = step;
-    }
+
+    public double getLowerLimit() { return lowerLimit; }
+    public double getUpperLimit() { return upperLimit; }
+    public double getStep() { return step; }
+    public double getResult() { return result; }
+    public boolean hasResult() { return hasResult; }
+
+    public void setLowerLimit(double lowerLimit) { this.lowerLimit = lowerLimit; }
+    public void setUpperLimit(double upperLimit) { this.upperLimit = upperLimit; }
+    public void setStep(double step) { this.step = step; }
     
     public void setResult(double result) {
         this.result = result;
@@ -89,19 +76,19 @@ public class RecIntegral implements Serializable{
     }
     
     public double calculateIntegral() {
-    double sum = 0.0;
-    double x = lowerLimit;
-    
-    while (x < upperLimit) {
-        double nextX = Math.min(x + step, upperLimit);//усечение шага
-        double y1 = Math.cos(x * x);
-        double y2 = Math.cos(nextX * nextX);
-        sum += (y1 + y2) * (nextX - x) / 2.0;//площадь 
-        x = nextX;
-    }
-    
-    this.result = sum;
-    this.hasResult = true;
-    return sum;
+        double sum = 0.0;
+        double x = lowerLimit;
+        
+        while (x < upperLimit) {
+            double nextX = Math.min(x + step, upperLimit);
+            double y1 = Math.cos(x * x);
+            double y2 = Math.cos(nextX * nextX);
+            sum += (y1 + y2) * (nextX - x) / 2.0;
+            x = nextX;
+        }
+        
+        this.result = sum;
+        this.hasResult = true;
+        return sum;
     }
 }

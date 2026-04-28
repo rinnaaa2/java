@@ -13,4 +13,5 @@ public class ValidData extends Exception {
     public ValidData(String message) {
         super(message);
     }
+    
 }
